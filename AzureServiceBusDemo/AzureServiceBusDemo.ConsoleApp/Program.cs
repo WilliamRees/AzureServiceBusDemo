@@ -9,9 +9,9 @@ namespace AzureServiceBusDemo.ConsoleApp
         static async Task Main(string[] args)
         {
             var services = new ServiceCollection();
+            services.AddTransient<App>();
+            services.AddAzureServiceBusFactory();
             var serviceProvider = services.BuildServiceProvider();
-
-
             await serviceProvider.GetService<App>().Run();
         }
     }
@@ -27,13 +27,15 @@ namespace AzureServiceBusDemo.ConsoleApp
 
         public async Task Run()
         {
-            var client = this._messageBusFactory.GetClient("", "");
+            var client = this._messageBusFactory.GetClient(
+                "",
+                "");
 
             await client.PublishMessageAsync(new
             {
                 FirstName = "Bob",
                 LastName = "Smith"
-            }, "", "");
+            });
         }
     }
 }
