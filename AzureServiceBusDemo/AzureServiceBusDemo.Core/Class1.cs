@@ -1,4 +1,5 @@
 ﻿using Azure.Messaging.ServiceBus;
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
@@ -8,12 +9,12 @@ namespace AzureServiceBusDemo.Core
 {
     public interface IMessageBus
     {
-        Task PublishMessageAsync<T>(T message, string topicKey, string connectionString);
+        Task PublishMessageAsync<T>(T message);
     }
 
     public interface IMessageBusFactory
     {
-        IMessageBus GetClient(string connectionString, string topic);
+        IMessageBus GetClient(string connectionString, string sender);
     }
 
     internal class AzureServiceBus : IMessageBus
@@ -25,7 +26,7 @@ namespace AzureServiceBusDemo.Core
             this._serviceBusSender = serviceBusSender;
         }
 
-        public async Task PublishMessageAsync<T>(T message, string topic, string connectionString)
+        public async Task PublishMessageAsync<T>(T message)
         {
             var jsonString = JsonSerializer.Serialize(message);
 
@@ -48,9 +49,9 @@ namespace AzureServiceBusDemo.Core
 
         private readonly ConcurrentDictionary<string, ServiceBusSender> _senders = new ConcurrentDictionary<string, ServiceBusSender>();
 
-        public IMessageBus GetClient(string connectionString, string topic)
+        public IMessageBus GetClient(string connectionString, string senderName)
         {
-            var key = $"{connectionString}-{topic}";
+            var key = $"{connectionString}-{senderName}";
 
             if (this._senders.ContainsKey(key) && !this._senders[key].IsClosed)
             {
@@ -63,10 +64,15 @@ namespace AzureServiceBusDemo.Core
             {
                 if (this._senders.ContainsKey(key) && this._senders[key].IsClosed)
                 {
+                    if (this._senders[key].IsClosed)
+                    {
+                        this._senders[key].DisposeAsync().GetAwaiter().GetResult();
+                    }
+
                     return AzureServiceBus.Create(this._senders[key]);
                 }
 
-                var sender = client.CreateSender(topic);
+                var sender = client.CreateSender(senderName);
 
                 this._senders[key] = sender;
             }
@@ -98,6 +104,15 @@ namespace AzureServiceBusDemo.Core
         private bool ClientDoesntExistOrIsClosed(string connectionString)
         {
             return !this._clients.ContainsKey(connectionString) || this._clients[connectionString].IsClosed;
+        }
+    }
+
+    public static class DependencyInjectionExtensions 
+    { 
+        public static IServiceCollection AddAzureServiceBusFactory(this IServiceCollection services)
+        {
+            services.AddSingleton<IMessageBusFactory, AzureServiceBusFactory>();
+            return services;
         }
     }
 }
